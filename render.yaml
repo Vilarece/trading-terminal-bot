@@ -1,0 +1,49 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+# Deploy: push this repo to GitHub, then in Render choose
+# "New +" -> "Blueprint" and point it at the repo. Render reads this file
+# and creates both services below in one go, each on its free tier.
+#
+# After the first deploy, open the "actions-api" service's dashboard, copy
+# its public URL, and paste it into PUBLIC_BASE_URL on BOTH services (Render
+# doesn't know its own URL ahead of time, so this one field needs a manual
+# round-trip — everything else in .env.example still applies).
+#
+# Sept 11, 2026: corrected to match the swap/v2 API migration —
+# PLATFORM_FEE_BPS bumped 20 -> 50 (Jupiter's new referral-fee floor) and
+# FEE_ACCOUNTS_JSON removed (no longer used; the new API derives the fee
+# token account automatically from REFERRAL_ACCOUNT + the output mint —
+# see server/jupiter.mjs). JUPITER_API_KEY added as optional.
+services:
+  - type: web
+    name: clearlane-actions-api
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm run server
+    envVars:
+      - key: PORT
+        value: 3000
+      - key: PUBLIC_BASE_URL
+        sync: false
+      - key: PLATFORM_FEE_BPS
+        value: 50
+      - key: REFERRAL_ACCOUNT
+        sync: false
+      - key: JUPITER_API_KEY
+        sync: false
+      - key: SUPPORTED_TOKENS_JSON
+        sync: false
+
+  - type: worker
+    name: clearlane-telegram-bot
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm run bot
+    envVars:
+      - key: PUBLIC_BASE_URL
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: SUPPORTED_TOKENS_JSON
+        sync: false
