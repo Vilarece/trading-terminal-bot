@@ -1,4 +1,5 @@
 import "dotenv/config";
+import http from "node:http";
 
 /**
  * The Telegram half of the terminal: command handling and messaging only.
@@ -9,12 +10,20 @@ import "dotenv/config";
  *
  * Raw long-polling via Telegram's Bot API (no SDK dependency) — same style
  * as Idea 2's telegram.mjs, kept consistent across this project.
+ *
+ * Sept 15, 2026: Render's free tier no longer offers the "background
+ * worker" service type (paid plans only) — render.yaml now deploys this as
+ * a free "web service" instead, which just means Render expects something
+ * listening on PORT for its health checks. The tiny HTTP server below is
+ * only that: a 200 OK stub. The actual bot logic below is unchanged and
+ * still just long-polls Telegram in the same process.
  */
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || "").replace(/\/$/, "");
 const SUPPORTED_TOKENS = JSON.parse(process.env.SUPPORTED_TOKENS_JSON || "[]");
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
+const PORT = Number(process.env.PORT || 10000);
 
 function assertConfig() {
   const missing = [];
@@ -25,6 +34,20 @@ function assertConfig() {
     console.error("This bot needs the Actions server (server/index.mjs) already deployed and PUBLIC_BASE_URL pointed at it.");
     process.exit(1);
   }
+}
+
+// --- Health-check stub so Render's free "web service" plan is happy. ---
+// Not part of the bot's actual functionality — just keeps the platform's
+// port-binding requirement satisfied while the long-poll loop below runs.
+function startHealthServer() {
+  http
+    .createServer((req, res) => {
+      res.writeHead(200, { "Content-Type": "text/plain" });
+      res.end("Terminal bot is running (Telegram long-polling, not HTTP).");
+    })
+    .listen(PORT, () => {
+      console.log(`Health-check stub listening on :${PORT} (Render web-service requirement only).`);
+    });
 }
 
 let offset = 0;
@@ -159,4 +182,5 @@ async function loop() {
 }
 
 assertConfig();
+startHealthServer();
 loop();
