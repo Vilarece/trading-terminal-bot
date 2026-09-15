@@ -13,6 +13,15 @@
 # FEE_ACCOUNTS_JSON removed (no longer used; the new API derives the fee
 # token account automatically from REFERRAL_ACCOUNT + the output mint —
 # see server/jupiter.mjs). JUPITER_API_KEY added as optional.
+#
+# Sept 15, 2026: Render's free tier dropped the "background worker" service
+# type (paid plans only now) — the bot below is deployed as a second free
+# "web service" instead. bot/index.mjs now also starts a tiny HTTP stub on
+# PORT purely to satisfy Render's web-service health check; the bot's real
+# job (long-polling Telegram) is unchanged. If you're on a paid Render plan,
+# you can switch `type: web` back to `type: worker` for this service and
+# drop the PORT var — the stub server in bot/index.mjs is harmless either
+# way, it just won't be needed.
 services:
   - type: web
     name: clearlane-actions-api
@@ -34,13 +43,15 @@ services:
       - key: SUPPORTED_TOKENS_JSON
         sync: false
 
-  - type: worker
+  - type: web
     name: clearlane-telegram-bot
     runtime: node
     plan: free
     buildCommand: npm install
     startCommand: npm run bot
     envVars:
+      - key: PORT
+        value: 10000
       - key: PUBLIC_BASE_URL
         sync: false
       - key: TELEGRAM_BOT_TOKEN
