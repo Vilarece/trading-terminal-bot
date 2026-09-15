@@ -25,15 +25,23 @@ const SUPPORTED_TOKENS = JSON.parse(process.env.SUPPORTED_TOKENS_JSON || "[]");
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
 const PORT = Number(process.env.PORT || 10000);
 
-function assertConfig() {
+function configIsReady() {
   const missing = [];
   if (!BOT_TOKEN || BOT_TOKEN.startsWith("REPLACE_")) missing.push("TELEGRAM_BOT_TOKEN");
   if (!PUBLIC_BASE_URL || PUBLIC_BASE_URL.includes("REPLACE_")) missing.push("PUBLIC_BASE_URL");
   if (missing.length) {
     console.error(`Missing/placeholder .env values: ${missing.join(", ")}`);
     console.error("This bot needs the Actions server (server/index.mjs) already deployed and PUBLIC_BASE_URL pointed at it.");
-    process.exit(1);
+    // Sept 15, 2026: don't process.exit(1) here — on Render's free "web
+    // service" plan (see the file-level comment above) an exiting process
+    // means a failed deploy with no port ever bound. Instead we still start
+    // the health-check stub below so the deploy succeeds, and just skip the
+    // actual Telegram polling loop until real config is added — at which
+    // point redeploying (or a Render env-var update, which auto-restarts
+    // the service) picks it up and starts polling for real.
+    return false;
   }
+  return true;
 }
 
 // --- Health-check stub so Render's free "web service" plan is happy. ---
@@ -181,6 +189,9 @@ async function loop() {
   }
 }
 
-assertConfig();
 startHealthServer();
-loop();
+if (configIsReady()) {
+  loop();
+} else {
+  console.error("Bot is up (health check only) but NOT polling Telegram yet — add the missing values above in Render's env vars, then redeploy.");
+}
