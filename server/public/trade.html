@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Trade — non-custodial, opened from Telegram</title>
+<style>
+  :root{
+    --bg:#0b0d12; --panel:#12151d; --panel2:#171b26; --border:#242938;
+    --text:#e8ebf3; --muted:#8b93a7; --accent:#7c5cff; --accent2:#33d17a;
+    --danger:#ff5c7a; --warn:#ffb84d;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; min-height:100vh; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    display:flex; align-items:flex-start; justify-content:center; padding:40px 16px;
+  }
+  .wrap{width:100%; max-width:460px;}
+  .brand{display:flex; align-items:center; gap:10px; margin-bottom:18px;}
+  .brand .dot{width:10px;height:10px;border-radius:50%;background:var(--accent2);box-shadow:0 0 12px var(--accent2);}
+  .brand h1{font-size:16px; font-weight:600; margin:0; letter-spacing:.2px;}
+  .card{
+    background:linear-gradient(180deg,var(--panel),var(--panel2));
+    border:1px solid var(--border); border-radius:16px; padding:20px;
+    box-shadow:0 20px 60px rgba(0,0,0,.35);
+  }
+  .row{display:flex; gap:10px;}
+  .field{
+    background:#0e1117; border:1px solid var(--border); border-radius:12px;
+    padding:12px 14px; flex:1; min-width:0;
+  }
+  .field label{display:block; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:6px;}
+  .field select, .field input{
+    width:100%; background:transparent; border:none; color:var(--text);
+    font-size:18px; font-weight:600; outline:none;
+  }
+  .field input::placeholder{color:#4b5266;}
+  .swap-arrow{display:flex; align-items:center; justify-content:center; margin:6px 0; color:var(--muted); font-size:13px;}
+  .btn{
+    width:100%; padding:14px; border-radius:12px; border:none; cursor:pointer;
+    font-size:15px; font-weight:600; margin-top:12px; transition:opacity .15s;
+  }
+  .btn:disabled{opacity:.5; cursor:not-allowed;}
+  .btn-primary{background:var(--accent); color:white;}
+  .btn-primary:hover:not(:disabled){opacity:.9;}
+  .btn-ghost{background:transparent; color:var(--text); border:1px solid var(--border);}
+  .btn-ghost:hover:not(:disabled){background:var(--panel2);}
+  .quote{margin-top:16px; padding-top:14px; border-top:1px dashed var(--border); font-size:13px; color:var(--muted);}
+  .quote .line{display:flex; justify-content:space-between; padding:4px 0;}
+  .quote .line b{color:var(--text); font-weight:600;}
+  .quote .highlight{color:var(--accent2);}
+  .fee-callout{
+    margin-top:14px; padding:12px 14px; border-radius:12px; background:rgba(124,92,255,.08);
+    border:1px solid rgba(124,92,255,.25); font-size:12.5px; line-height:1.5; color:#c9c4ff;
+  }
+  .fee-callout b{color:#fff;}
+  .status{margin-top:12px; font-size:12.5px; min-height:16px;}
+  .status.err{color:var(--danger);}
+  .status.ok{color:var(--accent2);}
+  .status.warn{color:var(--warn);}
+  .foot{margin-top:16px; text-align:center; font-size:11px; color:var(--muted); line-height:1.6;}
+  a{color:var(--accent);}
+  .pill{display:inline-block; padding:2px 8px; border-radius:999px; background:var(--panel2); border:1px solid var(--border); font-size:11px; color:var(--muted); margin-left:8px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand"><div class="dot"></div><h1>Trade <span class="pill">non-custodial</span></h1></div>
+
+  <div class="card">
+    <div class="row">
+      <div class="field">
+        <label>You pay</label>
+        <select id="inputMint"></select>
+      </div>
+      <div class="field">
+        <label>Amount</label>
+        <input id="amount" type="number" min="0" step="any" placeholder="0.0" />
+      </div>
+    </div>
+    <div class="swap-arrow">&#8595; swapping into</div>
+    <div class="field">
+      <label>You receive</label>
+      <select id="outputMint"></select>
+    </div>
+
+    <button class="btn btn-primary" id="quoteBtn">Get quote</button>
+
+    <div class="quote" id="quoteBox" style="display:none;"></div>
+    <div class="fee-callout" id="feeCallout" style="display:none;"></div>
+
+    <button class="btn btn-ghost" id="connectBtn" style="margin-top:16px;">Connect wallet</button>
+    <button class="btn btn-primary" id="swapBtn" style="display:none;">Sign &amp; swap</button>
+
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="foot">
+    Opened from the Telegram terminal bot. Every trade is signed by <b>your own wallet</b> —
+    this page never holds your keys or funds.<br/>
+    Routed through <a href="https://jup.ag" target="_blank" rel="noopener">Jupiter</a>'s aggregator.
+  </div>
+</div>
+
+<script src="https://unpkg.com/@solana/web3.js@1.95.3/lib/index.iife.js"></script>
+<script>
+/* ============================================================================
+   CONFIG — edit before hosting. Migrated Sept 11, 2026 off the dead
+   quote-api.jup.ag/v6 API to api.jup.ag/swap/v2's order+execute flow — same
+   fix Idea 1's widget got Sept 9 (see fee-router-widget/index.html, proven
+   live with two real mainnet swaps). This page mirrors that logic exactly.
+
+   IMPORTANT: this needs its OWN Ultra/Swap+Trigger referral account from
+   https://referral.jup.ag — it CANNOT reuse Idea 1's Ultra referral account
+   pubkey. Each Jupiter API product tab (Referral / Swap+Trigger / Ultra) on
+   that dashboard issues a separate account address for the same wallet;
+   using the wrong one fails with a "referralAccount is initialized under
+   ... for project ..." error. Create a Referral Token Account there for
+   every output token below too — the API works out which one to pay from
+   this account plus the output mint, so no separate fee-account address is
+   passed here (the old FEE_ACCOUNTS map is gone).
+   ========================================================================== */
+const CONFIG = {
+  JUPITER_API: "https://api.jup.ag/swap/v2",
+  API_KEY: "",
+  // Jupiter's Referral Program enforces a 50bps minimum as of Sept 2026.
+  REFERRAL_FEE_BPS: 50,
+  REFERRAL_ACCOUNT: "REPLACE_WITH_YOUR_OWN_IDEA3_REFERRAL_ACCOUNT_PUBKEY",
+};
+
+// Keep this in sync with SUPPORTED_TOKENS_JSON in the server's .env — this
+// page is static and can't read the server's env directly.
+const TOKENS = [
+  { symbol: "SOL",  mint: "So11111111111111111111111111111111111111112", decimals: 9 },
+  { symbol: "USDC", mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", decimals: 6 },
+  { symbol: "JUP",  mint: "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN", decimals: 6 },
+  { symbol: "BONK", mint: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263", decimals: 5 },
+];
+
+const els = {
+  inputMint: document.getElementById("inputMint"),
+  outputMint: document.getElementById("outputMint"),
+  amount: document.getElementById("amount"),
+  quoteBtn: document.getElementById("quoteBtn"),
+  quoteBox: document.getElementById("quoteBox"),
+  feeCallout: document.getElementById("feeCallout"),
+  connectBtn: document.getElementById("connectBtn"),
+  swapBtn: document.getElementById("swapBtn"),
+  status: document.getElementById("status"),
+};
+
+TOKENS.forEach((t) => {
+  els.inputMint.add(new Option(t.symbol, t.mint));
+  els.outputMint.add(new Option(t.symbol, t.mint));
+});
+
+// --- Prefill from the URL the Telegram bot sent, e.g.
+//     trade.html?output=<mint>&amount=0.5&input=<mint> ---
+const urlParams = new URLSearchParams(window.location.search);
+const presetOutput = urlParams.get("output");
+const presetInput = urlParams.get("input");
+const presetAmount = urlParams.get("amount");
+els.inputMint.value = (presetInput && TOKENS.some((t) => t.mint === presetInput)) ? presetInput : TOKENS[0].mint;
+els.outputMint.value = (presetOutput && TOKENS.some((t) => t.mint === presetOutput)) ? presetOutput : TOKENS[1].mint;
+if (presetAmount) els.amount.value = presetAmount;
+
+let lastOrder = null;
+let wallet = null; // window.solflare or window.solana (Phantom) once connected
+
+function setStatus(msg, kind) {
+  els.status.textContent = msg || "";
+  els.status.className = "status" + (kind ? " " + kind : "");
+}
+function tokenBySymbolOrMint(mint) { return TOKENS.find((t) => t.mint === mint); }
+function toBaseUnits(amount, decimals) { return Math.round(Number(amount) * 10 ** decimals); }
+function fromBaseUnits(amount, decimals) { return Number(amount) / 10 ** decimals; }
+function referralConfigured() { return !CONFIG.REFERRAL_ACCOUNT.startsWith("REPLACE_"); }
+function jupiterHeaders() { return CONFIG.API_KEY ? { "x-api-key": CONFIG.API_KEY } : {}; }
+
+// Calls Jupiter's /order endpoint (replaces the old /quote + /swap pair).
+// Without `taker` it returns a route/quote with transaction:null — good for
+// a no-wallet preview. With `taker` it returns a real signable transaction.
+async function getOrder({ withFee, taker }) {
+  const inMint = els.inputMint.value;
+  const outMint = els.outputMint.value;
+  const inTok = tokenBySymbolOrMint(inMint);
+  const outTok = tokenBySymbolOrMint(outMint);
+  const amt = els.amount.value;
+  if (!amt || Number(amt) <= 0) throw new Error("Enter an amount first.");
+  const params = new URLSearchParams({
+    inputMint: inMint, outputMint: outMint,
+    amount: String(toBaseUnits(amt, inTok.decimals)), slippageBps: "50",
+  });
+  if (withFee && referralConfigured()) {
+    params.set("referralAccount", CONFIG.REFERRAL_ACCOUNT);
+    params.set("referralFee", String(CONFIG.REFERRAL_FEE_BPS));
+  }
+  if (taker) params.set("taker", taker);
+  const res = await fetch(`${CONFIG.JUPITER_API}/order?${params.toString()}`, { headers: jupiterHeaders() });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data.error) {
+    throw new Error(data.error || `Quote failed (${res.status}). Try a smaller amount or different pair.`);
+  }
+  return data;
+}
+
+els.quoteBtn.addEventListener("click", async () => {
+  setStatus("Fetching quote…");
+  els.quoteBox.style.display = "none";
+  els.feeCallout.style.display = "none";
+  els.swapBtn.style.display = "none";
+  try {
+    const outTok = tokenBySymbolOrMint(els.outputMint.value);
+    const [withFee, noFee] = await Promise.all([getOrder({ withFee: true }), getOrder({ withFee: false })]);
+    lastOrder = withFee;
+    const outAmt = fromBaseUnits(withFee.outAmount, outTok.decimals);
+    const outAmtNoFee = fromBaseUnits(noFee.outAmount, outTok.decimals);
+    const feePct = (CONFIG.REFERRAL_FEE_BPS / 100).toFixed(2);
+    const feeInOutputTokens = Math.max(outAmtNoFee - outAmt, 0);
+    els.quoteBox.style.display = "block";
+    els.quoteBox.innerHTML = `
+      <div class="line"><span>You receive</span><b class="highlight">${outAmt.toLocaleString(undefined,{maximumFractionDigits:6})} ${outTok.symbol}</b></div>
+      <div class="line"><span>Our fee ${referralConfigured() ? `(${feePct}%)` : "(not set up yet)"}</span><b>${feeInOutputTokens.toLocaleString(undefined,{maximumFractionDigits:6})} ${outTok.symbol}</b></div>
+      <div class="line"><span>Price impact</span><b>${(Number(withFee.priceImpactPct)*100).toFixed(3)}%</b></div>
+    `;
+    if (!referralConfigured()) {
+      els.feeCallout.style.display = "block";
+      els.feeCallout.innerHTML = `<b>No referral account set up yet.</b> This quote shows Jupiter's raw route with no fee attached. Create Idea 3's OWN account at <a href="https://referral.jup.ag" target="_blank" rel="noopener">referral.jup.ag</a> (Ultra/Swap+Trigger tab, not Idea 1's) and paste it into <code>CONFIG.REFERRAL_ACCOUNT</code>.`;
+    } else {
+      els.feeCallout.style.display = "block";
+      els.feeCallout.innerHTML = `<b>One combined number, before you sign.</b> Fee: <b>${feePct}%</b> — already reflected in "you receive" above. No separate priority-fee or slippage surprise after the fact.`;
+    }
+    els.swapBtn.style.display = wallet ? "block" : "none";
+    setStatus("Quote ready.", "ok");
+  } catch (e) {
+    setStatus(e.message || String(e), "err");
+  }
+});
+
+// Supports Phantom and Solflare (same as Idea 1's widget — was Phantom-only
+// before this migration). Also covers Telegram's in-app browser limitation:
+// wallet extensions can't inject into that sandboxed webview, so this page
+// needs to be opened in a real browser tab (Telegram's ••• > Open in
+// Safari/Chrome), same as before.
+function detectWalletProvider() {
+  if (window.solflare && window.solflare.isSolflare) return { provider: window.solflare, name: "Solflare" };
+  if (window.solana && window.solana.isPhantom) return { provider: window.solana, name: "Phantom" };
+  return null;
+}
+
+els.connectBtn.addEventListener("click", async () => {
+  const found = detectWalletProvider();
+  if (!found) {
+    setStatus("No supported wallet found. If you're inside Telegram's in-app browser, tap the ••• menu and choose 'Open in Safari/Chrome' first — wallet extensions need a real browser tab, not an embedded webview. Otherwise install Phantom (phantom.app) or Solflare (solflare.com).", "warn");
+    return;
+  }
+  try {
+    await found.provider.connect();
+    wallet = found.provider;
+    const pub = wallet.publicKey.toString();
+    els.connectBtn.textContent = `Connected (${found.name}): ${pub.slice(0, 4)}…${pub.slice(-4)}`;
+    els.connectBtn.disabled = true;
+    if (lastOrder) els.swapBtn.style.display = "block";
+    setStatus("Wallet connected. You control every signature from here.", "ok");
+  } catch (e) {
+    setStatus("Connection rejected.", "err");
+  }
+});
+
+els.swapBtn.addEventListener("click", async () => {
+  if (!wallet) return;
+  if (!referralConfigured()) {
+    setStatus("Set up your own referral account first — see README.md.", "warn");
+    return;
+  }
+  setStatus("Building transaction…");
+  try {
+    // Re-request the order WITH taker set — this is what actually returns a
+    // signable transaction (the preview quote above never includes `taker`).
+    const order = await getOrder({ withFee: true, taker: wallet.publicKey.toString() });
+    if (!order.transaction) {
+      throw new Error("No signable transaction returned for this route — try a smaller amount or a different pair.");
+    }
+    const txBuf = Uint8Array.from(atob(order.transaction), (c) => c.charCodeAt(0));
+    const transaction = solanaWeb3.VersionedTransaction.deserialize(txBuf);
+    setStatus("Confirm in your wallet…");
+    const signed = await wallet.signTransaction(transaction);
+    const signedTransaction = btoa(String.fromCharCode(...signed.serialize()));
+    setStatus("Submitting…");
+    const execRes = await fetch(`${CONFIG.JUPITER_API}/execute`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...jupiterHeaders() },
+      body: JSON.stringify({ requestId: order.requestId, signedTransaction }),
+    });
+    const result = await execRes.json().catch(() => ({}));
+    if (result.status !== "Success") {
+      throw new Error(result.error || `Swap failed (${execRes.status}).`);
+    }
+    els.status.innerHTML = `Submitted: ${result.signature.slice(0, 8)}… <a href="https://solscan.io/tx/${result.signature}" target="_blank" rel="noopener">View on Solscan →</a>`;
+    els.status.className = "status ok";
+  } catch (e) {
+    setStatus(e.message || "Swap cancelled or failed.", "err");
+  }
+});
+</script>
+</body>
+</html>
