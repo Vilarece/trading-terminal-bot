@@ -1,11 +1,67 @@
-# Non-Custodial Trading Terminal (Idea 3)
+# Clearlane Terminal (Idea 3): non-custodial trading bot
 
-A Telegram-based trading terminal — the category Trojan, Photon, BullX, and
-Banana Gun operate in — built so this project never holds a user's wallet.
-This is the highest-ceiling, least-passive, longest-timeline idea in the
-*Crypto & Blockchain Revenue Lane* plan (realistically 9–18 months to real
-traction), and the one whose entire pitch is a single fact: **we never touch
-your keys.**
+A Telegram trading bot that never holds a user's wallet. People trade **any
+Solana token** from chat and sign every trade in their own wallet
+(Phantom, Solflare, Backpack). Live at
+[@ClearlaneTerminalBot](https://t.me/ClearlaneTerminalBot).
+
+## v0.2 (Sept 17, 2026): any token, referrals, always-on bot
+
+- **Trade any token.** `/buy`, `/sell` and `/price` accept a symbol or a
+  mint address, and pasting a bare token address into the chat shows a
+  token card with buy buttons. Lookups use Jupiter's Tokens API v2.
+  *Why this now works without per-token setup:* Jupiter Ultra collects the
+  referral fee in **SOL** whenever SOL is one side of the trade. This was
+  confirmed live for SOL->WIF and WIF->SOL, a mint with no referral token
+  account (`feeMint` = SOL, `feeBps` = 50). Our referral account already
+  has a wSOL token account, so every SOL-paired trade pays the fee.
+- **Safety flags before any buy:** unverified token, low liquidity, mint or
+  freeze authority still enabled, concentrated holders, low organic activity.
+- **Referral program.** `/ref` gives each user a personal invite link
+  (`t.me/ClearlaneTerminalBot?start=ref_<id>`). Referrers earn 30% of our
+  net fee, which is 0.12% of their referrals' trade volume. `/wallet`
+  sets the payout address. Payouts are sent **manually** by the admin
+  (`/payouts` lists what's owed, `/paid ID USD` records a payment).
+  Attribution is first-touch, and users can't refer themselves.
+- **Trade tracking.** The trade page now gets quotes through `/api/order`
+  and submits through `/api/execute`. Both simply relay to Jupiter and add
+  our referral fee server-side, which lets the server credit each
+  completed trade to the right user and referrer and notify the admin.
+  Users still sign in their own wallet, and the server never sees a key.
+- **Mobile wallets.** Buttons open the trade page inside the Phantom or
+  Solflare apps, where the wallet is built in. This removes the "no wallet
+  found" dead end in Telegram's in-app browser. The trade page also has a
+  Max button (balances come from Jupiter's holdings API), a buy/sell flip
+  button and SOL amount presets.
+- **Always-on on Render's free plan.** The bot now uses a Telegram
+  **webhook** and runs in the same process as the trade page (`app.mjs`).
+  Previously it long-polled from a separate free service, and Render sleeps
+  free services after about 15 minutes without *incoming* requests, so the
+  bot went silent. Each Telegram message now wakes the service, and a
+  10-minute self-ping keeps it warm. One always-on free service uses about
+  720 of Render's 750 free hours a month, so don't keep a second free
+  service awake as well.
+- **Durable ledger without a database.** Referral and trade data is kept
+  in memory and backed up as a JSON file pinned in the admin's private
+  chat with the bot (`ADMIN_CHAT_ID`), then reloaded on startup.
+
+### Environment (v0.2)
+
+| Var | Needed? | Notes |
+|---|---|---|
+| `TELEGRAM_BOT_TOKEN` | yes, for the bot | Without it, only the web and API run. |
+| `ADMIN_CHAT_ID` | recommended | Your own chat id with the bot (send it `/whoami`). Enables trade alerts, `/stats`, `/payouts` and the durable ledger. |
+| `REFERRAL_ACCOUNT` | optional | Defaults to Idea 3's Ultra referral account `9nv5…FhY3`. |
+| `PLATFORM_FEE_BPS` | optional | Default 50 (Jupiter's minimum). |
+| `REF_SHARE_PCT` | optional | Default 30 (% of our net fee paid to referrers). |
+| `JUPITER_API_KEY` | optional | Higher rate limits. |
+| `PUBLIC_BASE_URL` | local only | On Render, `RENDER_EXTERNAL_URL` is used automatically. |
+
+`SUPPORTED_TOKENS_JSON` is no longer used.
+
+---
+
+## History: original notes (Sept 11–15, 2026)
 
 ## Migration status (Sept 11, 2026)
 
@@ -76,7 +132,7 @@ bot/
                  Sends links; never builds or signs anything itself.
 ```
 
-## Why "supported tokens" is a curated list, not "any token"
+## (Superseded in v0.2) Why "supported tokens" was a curated list
 
 Jupiter's referral-fee mechanism (the same one Idea 1 uses) pays fees into a
 **Referral Token Account you create for each specific output mint** —
@@ -153,10 +209,8 @@ step 3 above, run yourself, is the real proof this works end-to-end.
 
 ## Fast follows (not needed to launch)
 
-- **Arbitrary token support** via an appended fee-transfer instruction
-  instead of Jupiter's referral accounts (see above) — worth it once the
-  curated list proves there's real demand.
-- **Sell flow** (`/sell`) — same pattern as `/buy`, reversed input/output.
+- ~~Arbitrary token support~~ **Done in v0.2** (fee is collected in SOL; see top).
+- ~~Sell flow~~ **Done in v0.2.**
 - **New-pair alerts**, reusing Idea 2's polling pattern, to give the bot
   something to post proactively instead of only responding to commands.
 - **More Blink-aware surfaces** — the same `/buy` link that works in
