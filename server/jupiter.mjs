@@ -60,13 +60,16 @@ function jupiterHeaders(apiKey) {
  * price lookups (getUsdPrice below). With `taker`, also returns an
  * unsigned, base64-encoded transaction ready to hand to a wallet to sign.
  */
-export async function getOrder({ inputMint, outputMint, amount, slippageBps = 50, referralAccount, referralFeeBps, taker, apiKey }) {
+export async function getOrder({ inputMint, outputMint, amount, slippageBps, referralAccount, referralFeeBps, taker, apiKey }) {
   const params = new URLSearchParams({
     inputMint,
     outputMint,
     amount: String(amount),
-    slippageBps: String(slippageBps),
   });
+  // Sept 17, 2026: only pass slippage when explicitly asked. Left unset,
+  // Jupiter Ultra picks slippage automatically, which matters for volatile
+  // memecoins where a fixed 0.5% makes many trades fail.
+  if (slippageBps != null) params.set("slippageBps", String(slippageBps));
   if (referralAccount && referralFeeBps) {
     params.set("referralAccount", referralAccount);
     params.set("referralFee", String(referralFeeBps));
@@ -88,7 +91,7 @@ export async function getOrder({ inputMint, outputMint, amount, slippageBps = 50
  * same signature shape server/index.mjs already used, mapped onto the new
  * /order call. platformFeeBps here maps to referralFee (see getOrder).
  */
-export async function getQuote({ inputMint, outputMint, amount, slippageBps = 50, platformFeeBps, referralAccount, apiKey }) {
+export async function getQuote({ inputMint, outputMint, amount, slippageBps, platformFeeBps, referralAccount, apiKey }) {
   return getOrder({
     inputMint,
     outputMint,
