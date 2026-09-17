@@ -22,6 +22,12 @@
 # you can switch `type: web` back to `type: worker` for this service and
 # drop the PORT var — the stub server in bot/index.mjs is harmless either
 # way, it just won't be needed.
+# Sept 17, 2026 (v0.2): both services now run the same app.mjs (trade page,
+# order/execute relay, Blinks API and the webhook bot). The bot service is
+# the one that matters: it has TELEGRAM_BOT_TOKEN, uses its own URL
+# (RENDER_EXTERNAL_URL) in every link, and self-pings to stay awake. The
+# actions-api service is legacy (old links only) and can be suspended to save
+# free instance hours. Add ADMIN_CHAT_ID to the bot service.
 services:
   - type: web
     name: clearlane-actions-api
@@ -55,6 +61,8 @@ services:
       - key: PUBLIC_BASE_URL
         sync: false
       - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: ADMIN_CHAT_ID
         sync: false
       - key: SUPPORTED_TOKENS_JSON
         sync: false
