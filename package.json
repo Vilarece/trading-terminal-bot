@@ -1,11 +1,13 @@
 {
   "name": "trading-terminal-bot",
-  "version": "0.1.0",
-  "description": "Non-custodial Solana trading terminal — Telegram bot + Solana Actions (Blinks) API. Idea 3 of the Crypto & Blockchain Revenue Lane plan.",
+  "version": "0.2.0",
+  "description": "Non-custodial Solana trading terminal - Telegram bot, trade page and Solana Actions (Blinks) API. Trade any token; referral program.",
   "type": "module",
   "scripts": {
-    "server": "node server/index.mjs",
-    "bot": "node bot/index.mjs"
+    "start": "node app.mjs",
+    "server": "node app.mjs",
+    "bot": "node app.mjs",
+    "check": "node --check app.mjs && node --check bot/handlers.mjs && node --check lib/store.mjs && node --check lib/tokens.mjs && node --check lib/telegram.mjs"
   },
   "dependencies": {
     "@solana/web3.js": "^1.95.3",
